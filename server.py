@@ -71,7 +71,80 @@ async def get_weather(city: str) -> dict:
             "timezone": weather_data.get("timezone"),
             "observation_time": current.get("time"),
         }
+@mcp.tool()
+async def get_forecast(city: str, days: int = 3) -> dict:
+    """Get the weather forecast for a city for the next 1 to 7 days."""
 
+    # Ограничиваем прогноз диапазоном 1–7 дней
+    days = max(1, min(days, 7))
+
+    async with httpx.AsyncClient(timeout=20.0) as client:
+
+        # 1. Находим город
+        geo_response = await client.get(
+            GEOCODING_URL,
+            params={
+                "name": city,
+                "count": 1,
+                "language": "ru",
+                "format": "json",
+            },
+        )
+        geo_response.raise_for_status()
+        geo_data = geo_response.json()
+
+        if not geo_data.get("results"):
+            return {
+                "error": f"Город '{city}' не найден."
+            }
+
+        location = geo_data["results"][0]
+
+        latitude = location["latitude"]
+        longitude = location["longitude"]
+
+        # 2. Получаем прогноз
+        weather_response = await client.get(
+            WEATHER_URL,
+            params={
+                "latitude": latitude,
+                "longitude": longitude,
+                "daily": ",".join([
+                    "weather_code",
+                    "temperature_2m_max",
+                    "temperature_2m_min",
+                    "precipitation_sum",
+                    "wind_speed_10m_max",
+                ]),
+                "timezone": "auto",
+                "forecast_days": days,
+            },
+        )
+
+        weather_response.raise_for_status()
+        weather_data = weather_response.json()
+
+        daily = weather_data["daily"]
+
+        forecast = []
+
+        for i in range(len(daily["time"])):
+            forecast.append({
+                "date": daily["time"][i],
+                "temperature_max_c": daily["temperature_2m_max"][i],
+                "temperature_min_c": daily["temperature_2m_min"][i],
+                "precipitation_mm": daily["precipitation_sum"][i],
+                "wind_speed_max_kmh": daily["wind_speed_10m_max"][i],
+                "weather_code": daily["weather_code"][i],
+            })
+
+        return {
+            "city": location["name"],
+            "country": location.get("country"),
+            "timezone": weather_data.get("timezone"),
+            "days": days,
+            "forecast": forecast,
+        }
 
 if __name__ == "__main__":
     mcp.run(
