@@ -18,7 +18,7 @@ async def get_weather(city: str) -> dict:
             params={
                 "name": city,
                 "count": 1,
-                "language": "en",
+                "language": "ru",
                 "format": "json",
             },
         )
